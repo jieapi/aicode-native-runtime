@@ -1,0 +1,8 @@
+# This repo is authored on Windows and built on Linux (CI / WSL).
+# Scripts must keep LF or bash fails; PIN must not grow a trailing CR.
+* text=auto eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+PIN text eol=lf
+LICENSE.MIT text eol=lf

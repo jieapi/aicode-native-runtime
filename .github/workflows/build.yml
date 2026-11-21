@@ -1,0 +1,187 @@
+name: build-tawcroot-so
+
+# Builds only tawcroot's `libtawcroot.so` (arm64-v8a + x86_64) from upstream
+# wmww/tawc and publishes it as a release asset. No app, no compositor, no
+# Kotlin — just the rootless-chroot binary other projects can consume.
+#
+# Triggers:
+#   - workflow_dispatch: build a specific upstream ref (default: PIN)
+#   - schedule:          weekly; builds upstream main and bumps PIN if it moved
+#   - push (PIN/build.sh/workflow): rebuild what PIN points at
+#
+# Releases are tagged `tawcroot-<sha7>` and are skipped when the tag already
+# exists, so re-running is cheap and idempotent.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Upstream wmww/tawc ref (sha, tag or branch). Empty = PIN.'
+        required: false
+        default: ''
+      force:
+        description: 'Rebuild even if the release already exists'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 4 * * 1'
+  push:
+    paths:
+      - 'PIN'
+      - 'build.sh'
+      - '.github/workflows/build.yml'
+
+concurrency:
+  group: build-tawcroot-so
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: wmww/tawc
+  NDK_VERSION: 27.2.12479018
+  NDK_ZIP_URL: https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+
+jobs:
+  build:
+    # Pin the image: `ubuntu-latest` moves to 26.04 in Nov 2026 and the
+    # preinstalled NDK set moves with it. We install our own NDK anyway, but
+    # keeping the OS fixed keeps the produced bytes stable.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Resolve upstream commit
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_REF: ${{ inputs.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          ref="${INPUT_REF:-}"
+          if [ -z "$ref" ]; then
+            if [ "$EVENT" = "schedule" ]; then
+              ref="$(gh api "repos/$UPSTREAM_REPO/commits/main" --jq .sha)"
+            else
+              ref="$(tr -d '[:space:]' < PIN)"
+            fi
+          fi
+          sha="$(gh api "repos/$UPSTREAM_REPO/commits/$ref" --jq .sha)"
+          echo "ref=$ref"    >> "$GITHUB_OUTPUT"
+          echo "sha=$sha"    >> "$GITHUB_OUTPUT"
+          echo "sha7=${sha:0:7}" >> "$GITHUB_OUTPUT"
+          echo "tag=tawcroot-${sha:0:7}" >> "$GITHUB_OUTPUT"
+          echo "resolved $ref -> $sha"
+
+      - name: Decide whether to build
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ref.outputs.tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ "${FORCE:-}" = "true" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          elif gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists, nothing to do"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout upstream wmww/tawc
+        if: steps.gate.outputs.needed == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ steps.ref.outputs.sha }}
+          path: upstream
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Cache NDK download
+        if: steps.gate.outputs.needed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/ndk-cache
+          key: ndk-${{ env.NDK_VERSION }}-linux-x86_64
+
+      - name: Install NDK ${{ env.NDK_VERSION }}
+        if: steps.gate.outputs.needed == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/ndk-cache"
+          zip="$HOME/ndk-cache/android-ndk-r27c-linux.zip"
+          if [ ! -f "$zip" ]; then
+            curl -fL --retry 3 --retry-delay 5 -o "$zip.part" "$NDK_ZIP_URL"
+            mv "$zip.part" "$zip"
+          fi
+          rm -rf "$HOME/android-ndk-r27c"
+          unzip -q "$zip" -d "$HOME"
+          echo "ANDROID_NDK_HOME=$HOME/android-ndk-r27c" >> "$GITHUB_ENV"
+          "$HOME/android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" --version | head -1
+
+      - name: Build libtawcroot.so
+        if: steps.gate.outputs.needed == 'true'
+        # `bash` explicitly: the exec bit survives checkout on Linux, but this
+        # repo is authored on Windows, so never rely on it.
+        run: bash ./build.sh --tawc-dir upstream --abi both --out dist
+
+      - name: Upload workflow artifact
+        if: steps.gate.outputs.needed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tawcroot-${{ steps.ref.outputs.sha7 }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Publish release
+        if: steps.gate.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets=(
+            dist/libtawcroot-arm64-v8a.so
+            dist/libtawcroot-x86_64.so
+            dist/tawcroot-jniLibs.zip
+            dist/SHA256SUMS
+            dist/LICENSE.MIT
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            # No --target: the tag must point at a ref of *this* repo, while
+            # the upstream commit being built is not a commit here at all.
+            # The default (the default branch) is what we want; the upstream
+            # sha is recorded in the release notes instead.
+            gh release create "$TAG" \
+              --title "tawcroot ${TAG#tawcroot-}" \
+              --notes-file dist/RELEASE-NOTES.md \
+              "${assets[@]}"
+          fi
+
+      - name: Record the built commit in PIN
+        # Only the weekly tracking run moves PIN, and GITHUB_TOKEN pushes do
+        # not re-enter this workflow, so there is no loop.
+        if: steps.gate.outputs.needed == 'true' && github.event_name == 'schedule'
+        env:
+          SHA: ${{ steps.ref.outputs.sha }}
+          SHA7: ${{ steps.ref.outputs.sha7 }}
+        run: |
+          set -euo pipefail
+          echo "$SHA" > PIN
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PIN
+          if git diff --cached --quiet; then
+            echo "PIN already at $SHA7"
+          else
+            git commit -m "pin: tawcroot $SHA7"
+            git push
+          fi

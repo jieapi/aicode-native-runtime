@@ -1,0 +1,73 @@
+name: Build native runtime
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - PINS
+      - README.native-runtime.md
+      - build.sh
+      - build-all.sh
+      - build-proot.sh
+      - build-talloc.sh
+      - build-libandroid-shmem.sh
+      - build-termux-jni.sh
+      - verify-elf.sh
+      - .github/workflows/build-native.yml
+
+concurrency:
+  group: build-native-runtime
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      NDK_TAWC_VERSION: 27.2.12479018
+      NDK_NATIVE_VERSION: 28.2.13676358
+      NDK_TAWC_URL: https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+      NDK_NATIVE_URL: https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache NDK archives
+        uses: actions/cache@v4
+        with:
+          path: ~/ndk-cache
+          key: ndk-${{ env.NDK_TAWC_VERSION }}-${{ env.NDK_NATIVE_VERSION }}-linux-x86_64
+
+      - name: Install pinned NDKs
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/ndk-cache" "$HOME/android-ndks"
+          tawc_zip="$HOME/ndk-cache/android-ndk-r27c-linux.zip"
+          native_zip="$HOME/ndk-cache/android-ndk-r28c-linux.zip"
+          if [[ ! -f "$tawc_zip" ]]; then
+            curl -fL --retry 3 --retry-delay 5 "$NDK_TAWC_URL" -o "$tawc_zip.part"
+            mv "$tawc_zip.part" "$tawc_zip"
+          fi
+          if [[ ! -f "$native_zip" ]]; then
+            curl -fL --retry 3 --retry-delay 5 "$NDK_NATIVE_URL" -o "$native_zip.part"
+            mv "$native_zip.part" "$native_zip"
+          fi
+          rm -rf "$HOME/android-ndks/android-ndk-r27c" "$HOME/android-ndks/android-ndk-r28c"
+          unzip -q "$tawc_zip" -d "$HOME/android-ndks"
+          unzip -q "$native_zip" -d "$HOME/android-ndks"
+          echo "ANDROID_NDK_TAWC=$HOME/android-ndks/android-ndk-r27c" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_NATIVE=$HOME/android-ndks/android-ndk-r28c" >> "$GITHUB_ENV"
+          "$HOME/android-ndks/android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" --version | head -1
+          "$HOME/android-ndks/android-ndk-r28c/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" --version | head -1
+
+      - name: Build all native components
+        run: bash ./build-all.sh
+
+      - name: Upload native runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-runtime-${{ github.sha }}
+          path: dist/native-runtime/
+          if-no-files-found: error

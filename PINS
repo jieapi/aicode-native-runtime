@@ -1,0 +1,22 @@
+# Upstream sources and toolchains. Keep every native artifact reproducible.
+TAWC_REPO=https://github.com/wmww/tawc
+TAWC_COMMIT=a49a4075228f4801dadc1eee584aed33fe8ea4ce
+TAWC_NDK_VERSION=27.2.12479018
+
+PROOT_REPO=https://github.com/termux/proot
+PROOT_COMMIT=52d65a4dc140ca554d241a1438ddd4f6b00c9813
+PROOT_NDK_VERSION=28.2.13676358
+
+TALLOC_VERSION=2.5.0
+TALLOC_URL=https://www.samba.org/ftp/talloc/talloc-2.5.0.tar.gz
+TALLOC_SHA256=912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007
+
+SHMEM_REPO=https://github.com/termux/libandroid-shmem
+SHMEM_COMMIT=7f0bd7e25dbdd146265aff7c6a890029e374622d
+
+TERMUX_APP_REPO=https://github.com/termux/termux-app
+TERMUX_APP_REF=v0.118.0
+TERMUX_APP_COMMIT=6e2689f55295fa444be8ac8592c527c2c5ef3253
+
+MIN_SDK=26
+ABIS="arm64-v8a x86_64"
