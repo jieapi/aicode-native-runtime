@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -72,3 +72,31 @@ jobs:
           name: native-runtime-${{ github.sha }}
           path: dist/native-runtime/
           if-no-files-found: error
+
+      - name: Publish native runtime release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="native-runtime-${GITHUB_SHA::7}"
+          assets=(
+            dist/native-runtime/native-runtime-jniLibs.zip
+            dist/native-runtime/SHA256SUMS
+            dist/native-runtime/BUILD-INFO.txt
+            dist/native-runtime/PINS
+            dist/native-runtime/RELEASE-NOTES.md
+            dist/native-runtime/LICENSE.proot.GPL-2.0
+            dist/native-runtime/LICENSE.talloc
+            dist/native-runtime/LICENSE.libandroid-shmem.BSD-3-Clause
+            dist/native-runtime/LICENSE.tawcroot.MIT
+            dist/native-runtime/LICENSE.termux-app.Apache-2.0
+          )
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "AiCode native runtime ${GITHUB_SHA::7}" \
+              --notes-file dist/native-runtime/RELEASE-NOTES.md \
+              "${assets[@]}"
+          fi
