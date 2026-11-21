@@ -79,7 +79,7 @@ val tawcroot = File(applicationInfo.nativeLibraryDir, "libtawcroot.so")
 - PRoot/tawcroot 执行文件不包含 `PT_INTERP`；
 - 生成最终文件的 SHA256 清单。
 
-Termux JNI 使用 16 KB 链接参数重新构建，避免继续使用历史来源不明的 4 KB 预编译库。
+Termux JNI 使用 16 KB 链接参数重新构建，避免继续使用历史来源不明的 4 KB 预编译库。libandroid-shmem 的共享内存 key 路径运行时读取 `PROOT_TMP_DIR`，由 App 根据当前变体的 `filesDir` 注入，不绑定正式包、debug 包或 beta 包名。
 
 ## 许可证
 

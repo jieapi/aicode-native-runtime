@@ -1,0 +1,28 @@
+diff --git a/shmem.c b/shmem.c
+index f95fc07..0000000 100644
+--- a/shmem.c
++++ b/shmem.c
+@@ -23,7 +23,6 @@
+ #endif
+ 
+ #include "shm.h"
+ 
+ #define DBG(...) __android_log_print(ANDROID_LOG_INFO, "shmem", __VA_ARGS__)
+-#define ASHV_KEY_SYMLINK_PATH _PATH_TMP "ashv_key_%d"
+ #define ANDROID_SHMEM_SOCKNAME "/dev/shm/%08x"
+ #define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
+@@ -349,7 +348,15 @@ int shmget(key_t key, size_t size, int shmflg)
+ 		// (3) If connected and opened, done. If connection refused
+ 		//     take ownership of the key and create the symlink.
+ 		// (4) If no symlink, create it.
+-		sprintf(symlink_path, ASHV_KEY_SYMLINK_PATH, key);
++		const char *tmp_path = getenv("PROOT_TMP_DIR");
++		if (tmp_path == NULL || tmp_path[0] == '\0') tmp_path = "/tmp/";
++		size_t tmp_path_length = strlen(tmp_path);
++		if (tmp_path[tmp_path_length - 1] == '/') {
++			snprintf(symlink_path, sizeof(symlink_path), "%sashv_key_%d", tmp_path, key);
++		} else {
++			snprintf(symlink_path, sizeof(symlink_path), "%s/ashv_key_%d", tmp_path, key);
++		}
+ 		char path_buffer[256];
+ 		char num_buffer[64];
