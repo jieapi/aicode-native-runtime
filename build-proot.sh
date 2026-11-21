@@ -64,7 +64,7 @@ cp "$OUT_DIR/talloc-$ABI.h" "$TALLOC_PREFIX/include/talloc.h"
 LOADER_DIR="$OUT_DIR/loader/$ABI"
 # Runtime always supplies PROOT_LOADER/PROOT_LOADER_32. Keep the compiled
 # fallback path stable so the build directory never leaks into the ELF.
-PROOT_LOADER_DEFINE='-DPROOT_UNBUNDLE_LOADER=\\"/system/lib64\\"'
+PROOT_LOADER_DEFINE='-DPROOT_UNBUNDLE_LOADER="/system/lib64"'
 (
     cd "$WORK_DIR/src"
     make clean >/dev/null 2>&1 || true
