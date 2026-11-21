@@ -10,7 +10,32 @@ source "$ROOT_DIR/PINS"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/native-runtime}"
 WORK_DIR="$OUT_DIR/work"
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR/jniLibs" "$WORK_DIR"
+mkdir -p "$OUT_DIR/jniLibs" "$WORK_DIR" "$ROOT_DIR/.cache/sources" "$ROOT_DIR/.cache/downloads"
+
+clone_at() {
+    local url="$1" commit="$2" dir="$3"
+    if [ ! -d "$dir/.git" ]; then
+        git clone --filter=blob:none "$url" "$dir"
+    fi
+    git -C "$dir" fetch --quiet --filter=blob:none origin
+    git -C "$dir" checkout --quiet --force "$commit"
+}
+
+prepare_sources() {
+    clone_at "$PROOT_REPO" "$PROOT_COMMIT" "$ROOT_DIR/.cache/sources/proot"
+    clone_at "$SHMEM_REPO" "$SHMEM_COMMIT" "$ROOT_DIR/.cache/sources/libandroid-shmem"
+    clone_at "$TERMUX_APP_REPO" "$TERMUX_APP_COMMIT" "$ROOT_DIR/.cache/sources/termux-app"
+    local archive="$ROOT_DIR/.cache/downloads/talloc-${TALLOC_VERSION}.tar.gz"
+    if [ ! -f "$archive" ]; then
+        curl -fL --retry 3 --retry-delay 5 "$TALLOC_URL" -o "$archive.part"
+        mv "$archive.part" "$archive"
+    fi
+    printf '%s  %s\n' "$TALLOC_SHA256" "$archive" | sha256sum -c -
+    if [ ! -d "$ROOT_DIR/.cache/sources/talloc" ]; then
+        tar -xzf "$archive" -C "$ROOT_DIR/.cache/sources"
+        mv "$ROOT_DIR/.cache/sources/talloc-${TALLOC_VERSION}" "$ROOT_DIR/.cache/sources/talloc"
+    fi
+}
 
 find_ndk() {
     local version="$1" explicit="${2:-}" candidate
@@ -34,6 +59,7 @@ find_ndk() {
     exit 1
 }
 
+prepare_sources
 NDK_TAWC="$(find_ndk "$TAWC_NDK_VERSION" "${ANDROID_NDK_TAWC:-}")"
 NDK_NATIVE="$(find_ndk "$PROOT_NDK_VERSION" "${ANDROID_NDK_NATIVE:-}")"
 export ANDROID_NDK_HOME="$NDK_TAWC"
