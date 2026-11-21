@@ -39,15 +39,15 @@ NDK_NATIVE="$(find_ndk "$PROOT_NDK_VERSION" "${ANDROID_NDK_NATIVE:-}")"
 export ANDROID_NDK_HOME="$NDK_TAWC"
 
 # Build tawcroot using its pinned NDK and upstream commit.
-"$ROOT_DIR/build.sh" \
+bash "$ROOT_DIR/build.sh" \
     --out "$OUT_DIR/tawcroot" \
     --ref "$TAWC_COMMIT"
 
 # Build PRoot and Termux JNI using the 16 KB-capable NDK.
 for abi in arm64-v8a x86_64; do
-    ANDROID_NDK_HOME="$NDK_NATIVE" "$ROOT_DIR/build-proot.sh" "$abi" "$OUT_DIR/proot"
+    ANDROID_NDK_HOME="$NDK_NATIVE" bash "$ROOT_DIR/build-proot.sh" "$abi" "$OUT_DIR/proot"
 done
-OUT_DIR="$OUT_DIR/termux-jni" ANDROID_NDK_HOME="$NDK_NATIVE" "$ROOT_DIR/build-termux-jni.sh"
+OUT_DIR="$OUT_DIR/termux-jni" ANDROID_NDK_HOME="$NDK_NATIVE" bash "$ROOT_DIR/build-termux-jni.sh"
 
 # Merge only verified runtime files into the consumer-facing jniLibs tree.
 for abi in arm64-v8a x86_64; do
@@ -60,7 +60,7 @@ done
 LLVM_READELF="$NDK_NATIVE/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
 mapfile -t ELFS < <(find "$OUT_DIR/jniLibs" -type f -name '*.so' | sort)
 [ "${#ELFS[@]}" -gt 0 ] || { echo "no native outputs" >&2; exit 1; }
-"$ROOT_DIR/verify-elf.sh" "${ELFS[@]}"
+bash "$ROOT_DIR/verify-elf.sh" "${ELFS[@]}"
 
 # Preserve upstream notices alongside the binary release.
 cp "$ROOT_DIR/LICENSE.MIT" "$OUT_DIR/LICENSE.tawcroot.MIT"

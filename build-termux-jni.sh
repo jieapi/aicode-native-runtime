@@ -56,7 +56,7 @@ for abi in arm64-v8a x86_64; do
 done
 
 LLVM_READELF="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" \
-    "$ROOT_DIR/verify-elf.sh" \
+    bash "$ROOT_DIR/verify-elf.sh" \
     "$OUT_DIR/jniLibs/arm64-v8a/libtermux.so" \
     "$OUT_DIR/jniLibs/x86_64/libtermux.so"
 

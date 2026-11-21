@@ -51,8 +51,8 @@ if ! grep -q '#include <string.h>' "$WORK_DIR/src/extension/ashmem_memfd/ashmem_
         "$WORK_DIR/src/extension/ashmem_memfd/ashmem_memfd.c"
 fi
 
-"$ROOT_DIR/build-talloc.sh" "$ABI" "$OUT_DIR"
-"$ROOT_DIR/build-libandroid-shmem.sh" "$ABI" "$OUT_DIR"
+bash "$ROOT_DIR/build-talloc.sh" "$ABI" "$OUT_DIR"
+bash "$ROOT_DIR/build-libandroid-shmem.sh" "$ABI" "$OUT_DIR"
 
 TALLOC_PREFIX="$OUT_DIR/prefix/$ABI"
 mkdir -p "$TALLOC_PREFIX/lib" "$TALLOC_PREFIX/include"
@@ -86,7 +86,7 @@ else
     exit 1
 fi
 
-LLVM_READELF="$TOOLCHAIN/bin/llvm-readelf" "$ROOT_DIR/verify-elf.sh" \
+LLVM_READELF="$TOOLCHAIN/bin/llvm-readelf" bash "$ROOT_DIR/verify-elf.sh" \
     "$OUT_DIR/jniLibs/$ABI/libproot.so" \
     "$OUT_DIR/jniLibs/$ABI/libproot-loader.so" \
     "$OUT_DIR/jniLibs/$ABI/libproot-loader32.so"
