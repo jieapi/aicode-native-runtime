@@ -45,6 +45,23 @@ if needle not in text:
 path.write_text(text.replace(needle, replacement, 1))
 PY
 
+# Keep the compiled fallback path in a C header instead of passing quoted
+# text through Bash -> make -> clang command-line parsing.
+cat > "$WORK_DIR/src/proot-build-config.h" <<'EOF'
+#define PROOT_UNBUNDLE_LOADER "/system/lib64"
+EOF
+python3 - "$WORK_DIR/src/GNUmakefile" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = '  CFLAGS += "-DPROOT_UNBUNDLE_LOADER=\\\"$(PROOT_UNBUNDLE_LOADER)\\\""\n'
+if old not in text:
+    raise SystemExit("PRoot loader compile flag not found")
+path.write_text(text.replace(old, '  # PROOT_UNBUNDLE_LOADER is declared in proot-build-config.h.\n', 1))
+PY
+
 # NDK r28c does not expose this include transitively on all API levels.
 if ! grep -q '#include <string.h>' "$WORK_DIR/src/extension/ashmem_memfd/ashmem_memfd.c"; then
     perl -0pi -e 's/#include <stdlib.h>\n/#include <stdlib.h>\n#include <string.h>\n/' \
@@ -62,9 +79,6 @@ cp "$OUT_DIR/talloc-$ABI.h" "$TALLOC_PREFIX/include/talloc.h"
 # Build the proot binary and both loaders together. The two loader files are
 # matched to this proot build and must never be mixed across revisions.
 LOADER_DIR="$OUT_DIR/loader/$ABI"
-# Runtime always supplies PROOT_LOADER/PROOT_LOADER_32. Keep the compiled
-# fallback path stable so the build directory never leaks into the ELF.
-PROOT_LOADER_DEFINE='-DPROOT_UNBUNDLE_LOADER="/system/lib64"'
 (
     cd "$WORK_DIR/src"
     make clean >/dev/null 2>&1 || true
@@ -76,7 +90,7 @@ PROOT_LOADER_DEFINE='-DPROOT_UNBUNDLE_LOADER="/system/lib64"'
         OBJCOPY="$OBJCOPY" \
         OBJDUMP="$OBJDUMP" \
         CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -I. -I$WORK_DIR/src -I$TALLOC_PREFIX/include" \
-        CFLAGS="-Wall -Wextra -O2 -fPIC -ffunction-sections -fdata-sections $PROOT_LOADER_DEFINE" \
+        CFLAGS="-Wall -Wextra -O2 -fPIC -ffunction-sections -fdata-sections -include $WORK_DIR/src/proot-build-config.h" \
         LDFLAGS="$TALLOC_PREFIX/lib/libtalloc.a $OUT_DIR/libandroid-shmem-$ABI.a -landroid -llog -Wl,--gc-sections -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -Wl,-z,noexecstack" \
         PROOT_UNBUNDLE_LOADER="$LOADER_DIR"
 )
