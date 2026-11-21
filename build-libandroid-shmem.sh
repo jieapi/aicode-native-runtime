@@ -29,7 +29,29 @@ mkdir -p "$BUILD_DIR"
 # stock NDK does not. The runtime path comes from PROOT_TMP_DIR, which the app
 # sets below its own filesDir, so this build contains no package-name path.
 cp "$SRC_DIR/shmem.c" "$BUILD_DIR/shmem.c"
-patch -d "$BUILD_DIR" -p1 < "$ROOT_DIR/patches/libandroid-shmem-runtime-tmp.patch"
+python3 - "$BUILD_DIR/shmem.c" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old_define = '#define ASHV_KEY_SYMLINK_PATH _PATH_TMP "ashv_key_%d"\n'
+if old_define not in text:
+    raise SystemExit("libandroid-shmem key path definition not found")
+text = text.replace(old_define, '', 1)
+old_call = '\t\tsprintf(symlink_path, ASHV_KEY_SYMLINK_PATH, key);'
+new_call = '''\t\tconst char *tmp_path = getenv("PROOT_TMP_DIR");
+\t\tif (tmp_path == NULL || tmp_path[0] == '\\0') tmp_path = "/tmp/";
+\t\tsize_t tmp_path_length = strlen(tmp_path);
+\t\tif (tmp_path[tmp_path_length - 1] == '/') {
+\t\t\tsnprintf(symlink_path, sizeof(symlink_path), "%sashv_key_%d", tmp_path, key);
+\t\t} else {
+\t\t\tsnprintf(symlink_path, sizeof(symlink_path), "%s/ashv_key_%d", tmp_path, key);
+\t\t}'''
+if old_call not in text:
+    raise SystemExit("libandroid-shmem key path call not found")
+path.write_text(text.replace(old_call, new_call, 1))
+PY
 $CC -fPIC -std=c11 -Wall -Wextra -ffunction-sections -fdata-sections \
     -I"$SRC_DIR" -I"$BUILD_DIR" -c "$BUILD_DIR/shmem.c" -o "$BUILD_DIR/shmem.o"
 "$AR" rcsD "$OUT_DIR/libandroid-shmem-$ABI.a" "$BUILD_DIR/shmem.o"
