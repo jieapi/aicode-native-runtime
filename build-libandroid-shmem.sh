@@ -22,10 +22,19 @@ AR="$TOOLCHAIN/bin/llvm-ar"
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 SRC_DIR="$ROOT_DIR/.cache/sources/libandroid-shmem"
 BUILD_DIR="$OUT_DIR/work/libandroid-shmem-$ABI"
+SHMEM_TMP_PATH="${AICODE_SHMEM_TMP_PATH:-/data/data/com.aicode/cache/}"
+case "$SHMEM_TMP_PATH" in
+    */) ;;
+    *) SHMEM_TMP_PATH="$SHMEM_TMP_PATH/" ;;
+esac
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
+# Termux's package build exports _PATH_TMP through its patched sysroot. The
+# stock NDK does not, so provide the app-private path explicitly while keeping
+# the upstream source unchanged.
 $CC -fPIC -std=c11 -Wall -Wextra -ffunction-sections -fdata-sections \
+    "-D_PATH_TMP=\"$SHMEM_TMP_PATH\"" \
     -I"$SRC_DIR" -c "$SRC_DIR/shmem.c" -o "$BUILD_DIR/shmem.o"
 "$AR" rcsD "$OUT_DIR/libandroid-shmem-$ABI.a" "$BUILD_DIR/shmem.o"
 "$RANLIB" "$OUT_DIR/libandroid-shmem-$ABI.a"
