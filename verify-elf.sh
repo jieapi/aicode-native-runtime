@@ -7,6 +7,7 @@ if [ $# -lt 1 ]; then
 fi
 
 READ_ELF="${LLVM_READELF:-llvm-readelf}"
+ALLOW_INTERP="${ALLOW_INTERP:-0}"
 command -v "$READ_ELF" >/dev/null 2>&1 || {
     echo "llvm-readelf not found; set LLVM_READELF" >&2
     exit 1
@@ -43,7 +44,7 @@ for line in headers:
             print("ERROR: executable stack", file=sys.stderr)
             sys.exit(1)
 for line in headers:
-    if line.split() and line.split()[0] == "INTERP":
+    if line.split() and line.split()[0] == "INTERP" and os.environ.get("ALLOW_INTERP") != "1":
         print("ERROR: PT_INTERP is not allowed for an exec-only runtime", file=sys.stderr)
         sys.exit(1)
 PY

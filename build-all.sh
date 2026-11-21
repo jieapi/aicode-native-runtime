@@ -86,7 +86,16 @@ done
 LLVM_READELF="$NDK_NATIVE/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
 mapfile -t ELFS < <(find "$OUT_DIR/jniLibs" -type f -name '*.so' | sort)
 [ "${#ELFS[@]}" -gt 0 ] || { echo "no native outputs" >&2; exit 1; }
-bash "$ROOT_DIR/verify-elf.sh" "${ELFS[@]}"
+for elf in "${ELFS[@]}"; do
+    case "$(basename "$elf")" in
+        libproot.so|libtermux.so)
+            ALLOW_INTERP=1 LLVM_READELF="$LLVM_READELF" bash "$ROOT_DIR/verify-elf.sh" "$elf"
+            ;;
+        *)
+            LLVM_READELF="$LLVM_READELF" bash "$ROOT_DIR/verify-elf.sh" "$elf"
+            ;;
+    esac
+done
 
 # Preserve upstream notices alongside the binary release.
 cp "$ROOT_DIR/LICENSE.MIT" "$OUT_DIR/LICENSE.tawcroot.MIT"

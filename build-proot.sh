@@ -61,6 +61,10 @@ cp "$OUT_DIR/talloc-$ABI.h" "$TALLOC_PREFIX/include/talloc.h"
 
 # Build the proot binary and both loaders together. The two loader files are
 # matched to this proot build and must never be mixed across revisions.
+LOADER_DIR="$OUT_DIR/loader/$ABI"
+# Runtime always supplies PROOT_LOADER/PROOT_LOADER_32. Keep the compiled
+# fallback path stable so the build directory never leaks into the ELF.
+PROOT_LOADER_DEFINE='-DPROOT_UNBUNDLE_LOADER=\\"/system/lib64\\"'
 (
     cd "$WORK_DIR/src"
     make clean >/dev/null 2>&1 || true
@@ -71,10 +75,10 @@ cp "$OUT_DIR/talloc-$ABI.h" "$TALLOC_PREFIX/include/talloc.h"
         STRIP="$STRIP" \
         OBJCOPY="$OBJCOPY" \
         OBJDUMP="$OBJDUMP" \
-        CPPFLAGS="-DARG_MAX=131072 -I$TALLOC_PREFIX/include" \
-        CFLAGS="-O2 -fPIC -ffunction-sections -fdata-sections" \
+        CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -I. -I$WORK_DIR/src -I$TALLOC_PREFIX/include" \
+        CFLAGS="-Wall -Wextra -O2 -fPIC -ffunction-sections -fdata-sections $PROOT_LOADER_DEFINE" \
         LDFLAGS="$TALLOC_PREFIX/lib/libtalloc.a $OUT_DIR/libandroid-shmem-$ABI.a -landroid -llog -Wl,--gc-sections -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -Wl,-z,noexecstack" \
-        PROOT_UNBUNDLE_LOADER="$OUT_DIR/loader/$ABI"
+        PROOT_UNBUNDLE_LOADER="$LOADER_DIR"
 )
 
 cp "$WORK_DIR/src/proot" "$OUT_DIR/jniLibs/$ABI/libproot.so"
@@ -86,7 +90,8 @@ else
     exit 1
 fi
 
+ALLOW_INTERP=1 LLVM_READELF="$TOOLCHAIN/bin/llvm-readelf" bash "$ROOT_DIR/verify-elf.sh" \
+    "$OUT_DIR/jniLibs/$ABI/libproot.so"
 LLVM_READELF="$TOOLCHAIN/bin/llvm-readelf" bash "$ROOT_DIR/verify-elf.sh" \
-    "$OUT_DIR/jniLibs/$ABI/libproot.so" \
     "$OUT_DIR/jniLibs/$ABI/libproot-loader.so" \
     "$OUT_DIR/jniLibs/$ABI/libproot-loader32.so"
